@@ -1,5 +1,6 @@
 package com.angryghandi.network.traffic.service.impl;
 
+import com.angryghandi.network.traffic.entity.TrafficSource;
 import com.angryghandi.network.traffic.service.NetgearClient;
 import lombok.RequiredArgsConstructor;
 import okhttp3.Call;
@@ -8,7 +9,6 @@ import okhttp3.Credentials;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -19,21 +19,12 @@ import static java.util.Objects.isNull;
 @RequiredArgsConstructor
 public class NetgearClientImpl implements NetgearClient {
 
-    @Value("${netgear-traffic-meter.router.url}")
-    private String url;
-
-    @Value("${netgear-traffic-meter.router.username}")
-    private String username;
-
-    @Value("${netgear-traffic-meter.router.password}")
-    private String password;
-
     private final RetryInterceptor retryInterceptor;
 
     private final CookieJar cookieJar;
 
     @Override
-    public String getTrafficMeter() {
+    public String getTrafficMeter(final TrafficSource trafficSource) {
 
         final OkHttpClient client = new OkHttpClient.Builder()
                 .addInterceptor(retryInterceptor)
@@ -42,8 +33,8 @@ public class NetgearClientImpl implements NetgearClient {
 
         String html;
         final Request request = new Request.Builder()
-                .url(url)
-                .header("Authorization", Credentials.basic(username, password))
+                .url(trafficSource.getUrl())
+                .header("Authorization", Credentials.basic(trafficSource.getUsername(), trafficSource.getPassword()))
                 .build();
 
         final Call call = client.newCall(request);

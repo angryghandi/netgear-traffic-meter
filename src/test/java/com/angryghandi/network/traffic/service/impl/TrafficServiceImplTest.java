@@ -2,6 +2,7 @@ package com.angryghandi.network.traffic.service.impl;
 
 import com.angryghandi.network.traffic.dto.TrafficStatistic;
 import com.angryghandi.network.traffic.repository.TrafficMeasureRepository;
+import com.angryghandi.network.traffic.repository.TrafficSourceRepository;
 import com.angryghandi.network.traffic.repository.TrafficTypeRepository;
 import com.angryghandi.network.traffic.service.NetgearClient;
 import com.angryghandi.network.traffic.service.TrafficService;
@@ -37,18 +38,23 @@ class TrafficServiceImplTest {
     private TrafficMeasureRepository trafficMeasureRepositoryMock;
 
     @Mock
+    private TrafficSourceRepository trafficSourceRepositoryMock;
+
+    @Mock
     private NetgearClient netgearClientMock;
 
     private TrafficService cut;
 
     @BeforeEach
     void beforeEach() {
-        cut = new TrafficServiceImpl(trafficTypeRepositoryMock, trafficMeasureRepositoryMock, netgearClientMock);
+        cut = new TrafficServiceImpl(trafficTypeRepositoryMock, trafficMeasureRepositoryMock, trafficSourceRepositoryMock,
+                netgearClientMock);
     }
 
     @AfterEach
     void afterEach() {
-        verifyNoMoreInteractions(trafficTypeRepositoryMock, trafficMeasureRepositoryMock, netgearClientMock);
+        verifyNoMoreInteractions(trafficTypeRepositoryMock, trafficMeasureRepositoryMock, trafficSourceRepositoryMock,
+                netgearClientMock);
     }
 
     @Test

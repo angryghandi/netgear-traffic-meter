@@ -32,6 +32,10 @@ public class TrafficMeasure {
     @ManyToOne(fetch = FetchType.EAGER)
     private TrafficType trafficType;
 
+    @JoinColumn(name = "source_id")
+    @ManyToOne(fetch = FetchType.EAGER)
+    private TrafficSource trafficSource;
+
     @Column(name = "ts", nullable = false)
     private Date timestamp;
 

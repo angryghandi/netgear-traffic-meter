@@ -2,8 +2,10 @@ package com.angryghandi.network.traffic.service.impl;
 
 import com.angryghandi.network.traffic.dto.TrafficStatistic;
 import com.angryghandi.network.traffic.entity.TrafficMeasure;
+import com.angryghandi.network.traffic.entity.TrafficSource;
 import com.angryghandi.network.traffic.entity.TrafficType;
 import com.angryghandi.network.traffic.repository.TrafficMeasureRepository;
+import com.angryghandi.network.traffic.repository.TrafficSourceRepository;
 import com.angryghandi.network.traffic.repository.TrafficTypeRepository;
 import com.angryghandi.network.traffic.service.NetgearClient;
 import com.angryghandi.network.traffic.service.TrafficService;
@@ -33,29 +35,47 @@ public class TrafficServiceImpl implements TrafficService {
 
     private final TrafficMeasureRepository trafficMeasureRepository;
 
+    private final TrafficSourceRepository trafficSourceRepository;
+
     private final NetgearClient netgearClient;
 
     @Override
     public void measureTraffic() {
-//        // convert traffic types to map so that they can be easily looked up by label / name
+
+        final List<TrafficSource> trafficSources = trafficSourceRepository.findAllByActiveTrue();
+        if (trafficSources.isEmpty()) {
+            log.info("No active traffic sources, no metrics to collect.");
+            return;
+        }
+
+        // convert traffic types to map so that they can be easily looked up by label / name
         final Map<String, TrafficType> trafficTypes = trafficTypeRepository.findAll().stream()
                 .collect(Collectors.toMap(TrafficType::getName, Function.identity()));
 
-        final String html = netgearClient.getTrafficMeter();
+        for (final TrafficSource trafficSource : trafficSources) {
+            measureTraffic(trafficSource, trafficTypes);
+        }
+
+    }
+
+    private void measureTraffic(final TrafficSource trafficSource, final Map<String, TrafficType> trafficTypes) {
+        final String html = netgearClient.getTrafficMeter(trafficSource);
         if (isNull(html)) {
             log.error("failed to get html from netgear client");
             return;
         }
+
         final List<TrafficStatistic> trafficStatistics = extractStatistics(html);
-        log.info("{}", trafficStatistics);
 
         // transform trafficStatistic to trafficMeasure
         final Date timestamp = new Date();
         final List<TrafficMeasure> trafficMeasures = new ArrayList<>();
         for (final TrafficStatistic trafficStatistic : trafficStatistics) {
+            log.info("{}", trafficStatistic);
             final TrafficType trafficType = trafficTypes.get(trafficStatistic.getLabel());
             final TrafficMeasure trafficMeasure = TrafficMeasure.builder()
                     .trafficType(trafficType)
+                    .trafficSource(trafficSource)
                     .timestamp(timestamp)
                     .download(trafficStatistic.getDownload())
                     .downloadAverage(trafficStatistic.getDownloadAverage())
