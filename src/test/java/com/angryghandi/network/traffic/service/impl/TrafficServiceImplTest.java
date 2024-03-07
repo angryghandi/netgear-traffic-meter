@@ -2,7 +2,6 @@ package com.angryghandi.network.traffic.service.impl;
 
 import com.angryghandi.network.traffic.dto.TrafficStatistic;
 import com.angryghandi.network.traffic.entity.TrafficMeasure;
-import com.angryghandi.network.traffic.entity.TrafficSource;
 import com.angryghandi.network.traffic.entity.TrafficType;
 import com.angryghandi.network.traffic.repository.TrafficMeasureRepository;
 import com.angryghandi.network.traffic.repository.TrafficSourceRepository;
@@ -28,8 +27,15 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Stream;
 
+import static com.angryghandi.network.traffic.TestConstants.TRAFFIC_SOURCE;
+import static com.angryghandi.network.traffic.TestConstants.TRAFFIC_TYPE_LAST_MONTH;
+import static com.angryghandi.network.traffic.TestConstants.TRAFFIC_TYPE_THIS_MONTH;
+import static com.angryghandi.network.traffic.TestConstants.TRAFFIC_TYPE_THIS_WEEK;
+import static com.angryghandi.network.traffic.TestConstants.TRAFFIC_TYPE_TODAY;
+import static com.angryghandi.network.traffic.TestConstants.TRAFFIC_TYPE_YESTERDAY;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -72,19 +78,19 @@ class TrafficServiceImplTest {
     @SneakyThrows
     void extractStatistics() {
         final TrafficStatistic trafficStatistic1 = TrafficStatistic.builder()
-                .label("TODAY").upload(6.86).download(52.42).total(59.28)
+                .label(TRAFFIC_TYPE_TODAY).upload(6.86).download(52.42).total(59.28)
                 .build();
         final TrafficStatistic trafficStatistic2 = TrafficStatistic.builder()
-                .label("YESTERDAY").upload(0.0).download(0.0).total(0.0)
+                .label(TRAFFIC_TYPE_YESTERDAY).upload(0.0).download(0.0).total(0.0)
                 .build();
         final TrafficStatistic trafficStatistic3 = TrafficStatistic.builder()
-                .label("THIS_WEEK").upload(6.86).uploadAverage(0.98).download(52.42).downloadAverage(7.49).total(59.28).totalAverage(8.47)
+                .label(TRAFFIC_TYPE_THIS_WEEK).upload(6.86).uploadAverage(0.98).download(52.42).downloadAverage(7.49).total(59.28).totalAverage(8.47)
                 .build();
         final TrafficStatistic trafficStatistic4 = TrafficStatistic.builder()
-                .label("THIS_MONTH").upload(6.86).uploadAverage(0.23).download(52.42).downloadAverage(1.75).total(59.28).totalAverage(1.98)
+                .label(TRAFFIC_TYPE_THIS_MONTH).upload(6.86).uploadAverage(0.23).download(52.42).downloadAverage(1.75).total(59.28).totalAverage(1.98)
                 .build();
         final TrafficStatistic trafficStatistic5 = TrafficStatistic.builder()
-                .label("LAST_MONTH").upload(0.00).uploadAverage(0.00).download(0.00).downloadAverage(0.00).total(0.00).totalAverage(0.00)
+                .label(TRAFFIC_TYPE_LAST_MONTH).upload(0.00).uploadAverage(0.00).download(0.00).downloadAverage(0.00).total(0.00).totalAverage(0.00)
                 .build();
         final String html = Files.readString(Path.of("src/test/resources/traffic_meter_1.htm"));
 
@@ -117,23 +123,40 @@ class TrafficServiceImplTest {
 
     @Test
     void measureTraffic() {
-        final TrafficSource trafficSource = TrafficSource.builder().build();
-        when(trafficSourceRepositoryMock.findAllByActiveTrue()).thenReturn(List.of(trafficSource));
+        when(trafficSourceRepositoryMock.findAllByActiveTrue()).thenReturn(List.of(TRAFFIC_SOURCE));
         when(trafficTypeRepositoryMock.findAll()).thenReturn(trafficTypes());
-        when(netgearClientMock.getTrafficMeter(trafficSource)).thenReturn(getHtml());
+        when(netgearClientMock.getTrafficMeter(TRAFFIC_SOURCE)).thenReturn(getHtml());
 
         cut.measureTraffic();
 
         verify(trafficSourceRepositoryMock).findAllByActiveTrue();
         verify(trafficTypeRepositoryMock).findAll();
-        verify(netgearClientMock).getTrafficMeter(trafficSource);
+        verify(netgearClientMock).getTrafficMeter(TRAFFIC_SOURCE);
         verify(trafficMeasureRepositoryMock).saveAll(trafficMeasuresCaptor.capture());
 
         assertThat(trafficMeasuresCaptor.getAllValues()).hasSize(1);
         final List<TrafficMeasure> trafficMeasures = trafficMeasuresCaptor.getValue();
         assertThat(trafficMeasures).hasSize(5);
+        assertThat(trafficMeasures.stream().map(TrafficMeasure::getTrafficType).toList())
+                .containsExactlyInAnyOrderElementsOf(trafficTypes());
         assertThat(trafficMeasures.stream().map(tm -> tm.getTrafficType().getName()).toList())
-                .containsExactly("TODAY", "YESTERDAY", "THIS_WEEK", "THIS_MONTH", "LAST_MONTH");
+                .containsExactly(TRAFFIC_TYPE_TODAY, TRAFFIC_TYPE_YESTERDAY, TRAFFIC_TYPE_THIS_WEEK,
+                        TRAFFIC_TYPE_THIS_MONTH, TRAFFIC_TYPE_LAST_MONTH);
+
+        final Optional<TrafficMeasure> optionalTrafficMeasure = trafficMeasures.stream()
+                .filter(tm -> tm.getTrafficType().getName().equals(TRAFFIC_TYPE_THIS_WEEK)).findFirst();
+        assertThat(optionalTrafficMeasure).isPresent();
+        final TrafficMeasure trafficMeasure = optionalTrafficMeasure.get();
+        assertThat(trafficMeasure.getId()).isNull();
+        assertThat(trafficMeasure.getTimestamp()).isNotNull();
+        assertThat(trafficMeasure.getTrafficType()).isNotNull();
+        assertThat(trafficMeasure.getTrafficSource()).isEqualTo(TRAFFIC_SOURCE);
+        assertThat(trafficMeasure.getUpload()).isEqualTo(6.86);
+        assertThat(trafficMeasure.getUploadAverage()).isEqualTo(0.98);
+        assertThat(trafficMeasure.getDownload()).isEqualTo(52.42);
+        assertThat(trafficMeasure.getDownloadAverage()).isEqualTo(7.49);
+        assertThat(trafficMeasure.getTotal()).isEqualTo(59.28);
+        assertThat(trafficMeasure.getTotalAverage()).isEqualTo(8.47);
     }
 
     private static Stream<Arguments> valuesAndAverages() {
@@ -150,11 +173,11 @@ class TrafficServiceImplTest {
     }
 
     private List<TrafficType> trafficTypes() {
-        return List.of(TrafficType.builder().id(1L).name("TODAY").build(),
-                TrafficType.builder().id(2L).name("YESTERDAY").build(),
-                TrafficType.builder().id(3L).name("THIS_WEEK").build(),
-                TrafficType.builder().id(4L).name("LAST_MONTH").build(),
-                TrafficType.builder().id(5L).name("THIS_MONTH").build());
+        return List.of(TrafficType.builder().id(1L).name(TRAFFIC_TYPE_TODAY).build(),
+                TrafficType.builder().id(2L).name(TRAFFIC_TYPE_YESTERDAY).build(),
+                TrafficType.builder().id(3L).name(TRAFFIC_TYPE_THIS_WEEK).build(),
+                TrafficType.builder().id(4L).name(TRAFFIC_TYPE_LAST_MONTH).build(),
+                TrafficType.builder().id(5L).name(TRAFFIC_TYPE_THIS_MONTH).build());
     }
 
 }
