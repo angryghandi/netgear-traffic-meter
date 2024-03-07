@@ -1,6 +1,9 @@
 package com.angryghandi.network.traffic.service.impl;
 
 import com.angryghandi.network.traffic.dto.TrafficStatistic;
+import com.angryghandi.network.traffic.entity.TrafficMeasure;
+import com.angryghandi.network.traffic.entity.TrafficSource;
+import com.angryghandi.network.traffic.entity.TrafficType;
 import com.angryghandi.network.traffic.repository.TrafficMeasureRepository;
 import com.angryghandi.network.traffic.repository.TrafficSourceRepository;
 import com.angryghandi.network.traffic.repository.TrafficTypeRepository;
@@ -14,18 +17,23 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.WARN)
@@ -42,6 +50,9 @@ class TrafficServiceImplTest {
 
     @Mock
     private NetgearClient netgearClientMock;
+
+    @Captor
+    private ArgumentCaptor<List<TrafficMeasure>> trafficMeasuresCaptor;
 
     private TrafficService cut;
 
@@ -95,9 +106,55 @@ class TrafficServiceImplTest {
         assertThat(results[1]).isEqualTo(value2);
     }
 
+    @Test
+    void measureTraffic_no_sources() {
+        when(trafficSourceRepositoryMock.findAllByActiveTrue()).thenReturn(List.of());
+
+        cut.measureTraffic();
+
+        verify(trafficSourceRepositoryMock).findAllByActiveTrue();
+    }
+
+    @Test
+    void measureTraffic() {
+        final TrafficSource trafficSource = TrafficSource.builder().build();
+        when(trafficSourceRepositoryMock.findAllByActiveTrue()).thenReturn(List.of(trafficSource));
+        when(trafficTypeRepositoryMock.findAll()).thenReturn(trafficTypes());
+        when(netgearClientMock.getTrafficMeter(trafficSource)).thenReturn(getHtml());
+
+        cut.measureTraffic();
+
+        verify(trafficSourceRepositoryMock).findAllByActiveTrue();
+        verify(trafficTypeRepositoryMock).findAll();
+        verify(netgearClientMock).getTrafficMeter(trafficSource);
+        verify(trafficMeasureRepositoryMock).saveAll(trafficMeasuresCaptor.capture());
+
+        assertThat(trafficMeasuresCaptor.getAllValues()).hasSize(1);
+        final List<TrafficMeasure> trafficMeasures = trafficMeasuresCaptor.getValue();
+        assertThat(trafficMeasures).hasSize(5);
+        assertThat(trafficMeasures.stream().map(tm -> tm.getTrafficType().getName()).toList())
+                .containsExactly("TODAY", "YESTERDAY", "THIS_WEEK", "THIS_MONTH", "LAST_MONTH");
+    }
+
     private static Stream<Arguments> valuesAndAverages() {
         return Stream.of(Arguments.of("6.86 / 0.98", 6.86, 0.98),
                 Arguments.of("0.00 / 0.00", 0.0, 0.0));
+    }
+
+    @SneakyThrows
+    private String getHtml() {
+        try (final InputStream is = getClass().getResourceAsStream("/traffic_meter_1.htm")) {
+            assertThat(is).isNotNull();
+            return new String(is.readAllBytes());
+        }
+    }
+
+    private List<TrafficType> trafficTypes() {
+        return List.of(TrafficType.builder().id(1L).name("TODAY").build(),
+                TrafficType.builder().id(2L).name("YESTERDAY").build(),
+                TrafficType.builder().id(3L).name("THIS_WEEK").build(),
+                TrafficType.builder().id(4L).name("LAST_MONTH").build(),
+                TrafficType.builder().id(5L).name("THIS_MONTH").build());
     }
 
 }
